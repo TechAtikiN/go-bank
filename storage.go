@@ -13,6 +13,7 @@ type Storage interface {
 	UpdateAccount(*Account) error
 	GetAccounts() ([]*Account, error)
 	GetAccountById(int) (*Account, error)
+	GetAccountByNumber(int64) (*Account, error)
 }
 
 type PostgresStore struct {
@@ -46,6 +47,7 @@ func (s *PostgresStore) createAccountTable() error {
 		first_name varchar(255),
 		last_name varchar(255),
 		number serial,
+		encrypted_password varchar(255),
 		balance serial,
 		created_at timestamp
 	)`
@@ -56,14 +58,15 @@ func (s *PostgresStore) createAccountTable() error {
 
 func (s *PostgresStore) CreateAccount(acc *Account) error {
 	query := `insert into accounts
-		(first_name, last_name, number, balance, created_at)
-		values ($1, $2, $3, $4, $5)`
+		(first_name, last_name, number, encrypted_password, balance, created_at)
+		values ($1, $2, $3, $4, $5, $6)`
 
 	resp, err := s.db.Query(
 		query,
 		acc.FirstName,
 		acc.LastName,
 		acc.Number,
+		acc.EncryptedPassword,
 		acc.Balance,
 		acc.CreatedAt,
 	)
@@ -72,7 +75,7 @@ func (s *PostgresStore) CreateAccount(acc *Account) error {
 		return err
 	}
 
-	fmt.Println("%+v\n", resp)
+	fmt.Println(resp)
 
 	return nil
 }
@@ -113,6 +116,19 @@ func (s *PostgresStore) DeleteAccount(id int) error {
 	return err
 }
 
+func (s *PostgresStore) GetAccountByNumber(number int64) (*Account, error) {
+	rows, err := s.db.Query("select * from accounts where number = $1", number)
+	if err != nil {
+		return nil, err
+	}
+
+	for rows.Next() {
+		return scanIntoAccount(rows)
+	}
+
+	return nil, fmt.Errorf("account %d not found", number)
+}
+
 func (s *PostgresStore) UpdateAccount(a *Account) error {
 	return nil
 }
@@ -125,6 +141,7 @@ func scanIntoAccount(rows *sql.Rows) (*Account, error) {
 		&account.FirstName,
 		&account.LastName,
 		&account.Number,
+		&account.EncryptedPassword,
 		&account.Balance,
 		&account.CreatedAt,
 	)
